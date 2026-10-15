@@ -275,6 +275,11 @@ class EcoFlowDeviceCoordinator(
         # runs before the expensive one (force reconnect).
         self._stale_reactivate_tried: bool = False
         self._last_smartplug_get_all_ts: float = 0.0
+        # STREAM AC 5000 (#568): set while the last own-connection per-unit
+        # block listed this unit without a sign, which the quotas poll answers
+        # with a throttled get-all.
+        self._unit_batt_unsigned: bool = False
+        self._last_unit_batt_get_all_ts: float = 0.0
         # Surplus auto-sync state (PowerOcean Enhanced Mode):
         # the EcoFlow app sets the slider via cmd_id=112 wire field 4 only,
         # which leaves the EMS-side `sys_bat_backup_ratio` unchanged. The

@@ -8,10 +8,12 @@ from typing import TYPE_CHECKING
 
 from ..const import (
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_STREAM_AC5000,
     ENERGY_STREAM_KEEPALIVE_S,
     PING_KEEPALIVE_S,
     QUOTAS_KEEPALIVE_S,
     SMARTPLUG_GET_ALL_KEEPALIVE_S,
+    STREAM_AC5000_UNSIGNED_GET_ALL_S,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,6 +87,23 @@ class KeepaliveMixin(_Base):
                     >= SMARTPLUG_GET_ALL_KEEPALIVE_S
                 ):
                     self._last_smartplug_get_all_ts = now
+                    self.hass.async_add_executor_job(
+                        self._mqtt_client.send_get_all,
+                    )
+            # STREAM AC 5000 (#568): a unit whose battery power the pushes
+            # cannot sign holds its last reading until a get_reply arrives.
+            # Ask for one, at most once per STREAM_AC5000_UNSIGNED_GET_ALL_S.
+            elif (
+                self.device_type == DEVICE_TYPE_STREAM_AC5000
+                and self._unit_batt_unsigned
+            ):
+                now = time.monotonic()
+                if (
+                    self._last_unit_batt_get_all_ts <= 0.0
+                    or (now - self._last_unit_batt_get_all_ts)
+                    >= STREAM_AC5000_UNSIGNED_GET_ALL_S
+                ):
+                    self._last_unit_batt_get_all_ts = now
                     self.hass.async_add_executor_job(
                         self._mqtt_client.send_get_all,
                     )

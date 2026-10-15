@@ -96,6 +96,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _ping_unsub: asyncio.TimerHandle | None
     _credential_refresh_unsub: asyncio.TimerHandle | None
     _last_smartplug_get_all_ts: float
+    _unit_batt_unsigned: bool
+    _last_unit_batt_get_all_ts: float
     _last_mqtt_event_ts: float
     _last_flush_ts: float
     _surplus_sync_record: SurplusSyncRecord | None

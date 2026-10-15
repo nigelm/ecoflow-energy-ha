@@ -234,6 +234,9 @@ class StateApplyMixin(_Base):
             if own_connection:
                 stats["units_listed"] = len(power)
                 stats["own_unit_matched"] = self.device_sn in power
+                # Listed but unsigned: the quotas poll asks for the full
+                # state, which carries the sign (#568).
+                self._unit_batt_unsigned = self.device_sn in power and own is None
                 if own is not None:
                     parsed["unit_batt_w"] = own
                     self._own_unit_entry_ts[UNIT_POWER_BY_SN_KEY] = now

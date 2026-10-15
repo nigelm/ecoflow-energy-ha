@@ -42,6 +42,7 @@ from custom_components.ecoflow_energy.const import (
     SMARTPLUG_STALE_THRESHOLD_S,
     SOFT_UNAVAILABLE_S,
     STALE_THRESHOLD_S,
+    STREAM_AC5000_UNSIGNED_GET_ALL_S,
     STREAM_POWER_TO_ENERGY,
 )
 from custom_components.ecoflow_energy.coordinator import (
@@ -8878,6 +8879,90 @@ class TestLinkedUnitPower:
         assert coordinator.data["unit_batt_discharge_power_w"] == 300.0
         # The serial was listed, so this is not a serial mismatch.
         assert coordinator._unit_power_stats["own_unit_matched"] is True
+
+    async def test_an_unproven_entry_marks_the_unit_unsigned(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Listed without a sign sets the flag, a signed entry clears it (#568)."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        own, other = "ES22TESTUNITAAAA", "ES22TESTUNITBBBB"
+        coordinator._apply_data({"_unit_batt_w_by_sn": {own: None}})
+        assert coordinator._unit_batt_unsigned is True
+        coordinator._apply_data({"_unit_batt_w_by_sn": {own: -300.0}})
+        assert coordinator._unit_batt_unsigned is False
+        # A block that does not list this unit says nothing about its sign.
+        coordinator._apply_data({"_unit_batt_w_by_sn": {other: None}})
+        assert coordinator._unit_batt_unsigned is False
+
+    async def test_a_handed_over_block_leaves_the_flag_alone(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Only this unit's own connection decides whether it is unsigned."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data(
+            {"_unit_batt_w_by_sn": {"ES22TESTUNITAAAA": None}},
+            own_connection=False,
+        )
+        assert coordinator._unit_batt_unsigned is False
+
+    def _polled(
+        self, hass: HomeAssistant, coordinator: EcoFlowDeviceCoordinator, now: float
+    ) -> tuple[MagicMock, MagicMock]:
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=now,
+            ),
+            patch.object(hass, "async_add_executor_job") as mock_exec,
+        ):
+            coordinator._send_quotas_poll()
+        assert coordinator._quotas_unsub is not None
+        coordinator._quotas_unsub.cancel()
+        coordinator._quotas_unsub = None
+        return mock_mqtt, mock_exec
+
+    async def test_an_unsigned_unit_asks_for_the_full_state(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The get_reply carries the sign the pushes lack (#568)."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._unit_batt_unsigned = True
+        mqtt, mock_exec = self._polled(hass, coordinator, 1000.0)
+        mock_exec.assert_has_calls(
+            [call(mqtt.send_latest_quotas), call(mqtt.send_get_all)],
+            any_order=False,
+        )
+        assert coordinator._last_unit_batt_get_all_ts == 1000.0
+
+    async def test_the_full_state_request_is_throttled(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """At most one get-all per interval, however long the unit stays unsigned."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._unit_batt_unsigned = True
+        coordinator._last_unit_batt_get_all_ts = 1000.0
+        mqtt, mock_exec = self._polled(
+            hass, coordinator, 1000.0 + STREAM_AC5000_UNSIGNED_GET_ALL_S - 1.0
+        )
+        mock_exec.assert_called_once_with(mqtt.send_latest_quotas)
+        mqtt, mock_exec = self._polled(
+            hass, coordinator, 1000.0 + STREAM_AC5000_UNSIGNED_GET_ALL_S
+        )
+        mock_exec.assert_has_calls(
+            [call(mqtt.send_latest_quotas), call(mqtt.send_get_all)],
+            any_order=False,
+        )
+
+    async def test_a_signed_unit_asks_for_nothing_more(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """No unsigned reading, no extra traffic."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        mqtt, mock_exec = self._polled(hass, coordinator, 1000.0)
+        mock_exec.assert_called_once_with(mqtt.send_latest_quotas)
 
     async def test_an_unproven_entry_is_not_handed_to_a_sibling(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry

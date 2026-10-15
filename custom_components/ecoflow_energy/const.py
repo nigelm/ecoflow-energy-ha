@@ -491,6 +491,13 @@ PING_KEEPALIVE_S = 60  # MQTT ping heartbeat interval
 SMARTPLUG_GET_ALL_KEEPALIVE_S = (
     120.0  # Smart Plug app-auth: periodic full-state refresh
 )
+# STREAM AC 5000: how often a full-state request goes out while this unit's
+# battery power is unsigned (#568). The pushes carry the per-unit reading as a
+# magnitude only, and when a second unit moves power at the same time nothing
+# in a push gives it a sign, so the reading holds its last value. Only a
+# `get_reply` carries the signed `f50.1.4`, and without a request of our own
+# the next one came when somebody opened the EcoFlow app - hours later.
+STREAM_AC5000_UNSIGNED_GET_ALL_S = 60.0
 CREDENTIAL_REFRESH_CHECK_S = (
     43200.0  # Check every 12h whether credentials need proactive refresh
 )
