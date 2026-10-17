@@ -9,7 +9,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pytest
 from ecoflow_energy.const import (
+    _SN_PREFIX_EXCLUDED_KEYS,
     DELTA2MAX_BINARY_SENSORS,
     DELTA2MAX_NUMBERS,
     DELTA2MAX_SENSORS,
@@ -21,8 +23,10 @@ from ecoflow_energy.const import (
     DELTA_PROFILE_R351,
     DEVICE_TYPE_DISPLAY_NAMES,
     ENHANCED_ONLY_DEVICE_TYPES,
+    OCEAN2_CONTROL_PREFIXES,
     POWEROCEAN_BINARY_SENSORS,
     POWEROCEAN_SENSORS,
+    POWERPULSE_CONTROL_PREFIXES,
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_KEYS_MAX,
@@ -34,7 +38,9 @@ from ecoflow_energy.const import (
     SMARTPLUG_NUMBERS,
     SMARTPLUG_SENSORS,
     SMARTPLUG_SWITCHES,
+    STREAM_AC5000_CONTROL_PREFIXES,
     STREAM_BINARY_SENSORS,
+    STREAM_CONTROL_PREFIXES,
     STREAM_NUMBERS,
     STREAM_SENSORS,
     STREAM_SWITCHES,
@@ -49,8 +55,11 @@ from ecoflow_energy.const import (
 )
 from ecoflow_energy.ecoflow.const import (
     _POWERSTREAM_KEYWORDS,
+    _SN_PREFIX_DISPLAY_NAMES,
     _SN_PREFIX_MAP,
     _STREAM_KEYWORDS,
+    OCEAN2_AC_SIGN_INVERTED,
+    POWEROCEAN_SCHEDULE_POWER_MAX_W,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -1485,3 +1494,34 @@ class TestWave3Sensors:
         assert not any(w.enhanced_only for w in WAVE3_SWITCHES)
         assert not any(n.enhanced_only for n in WAVE3_NUMBERS)
         assert not any(s.enhanced_only for s in WAVE3_SELECTS)
+
+
+@pytest.mark.parametrize(
+    "keys",
+    [
+        _SN_PREFIX_DISPLAY_NAMES,
+        POWEROCEAN_SCHEDULE_POWER_MAX_W,
+        _SN_PREFIX_EXCLUDED_KEYS,
+        STREAM_CONTROL_PREFIXES,
+        POWERPULSE_CONTROL_PREFIXES,
+        STREAM_AC5000_CONTROL_PREFIXES,
+        OCEAN2_CONTROL_PREFIXES,
+        OCEAN2_AC_SIGN_INVERTED,
+    ],
+    ids=[
+        "display-names",
+        "schedule-power-max",
+        "excluded-keys",
+        "stream-control",
+        "powerpulse-control",
+        "stream-ac5000-control",
+        "ocean2-control",
+        "ocean2-ac-sign-inverted",
+    ],
+)
+def test_every_table_keyed_by_prefix_names_a_registered_prefix(keys: Any) -> None:
+    """The prefix register is the one place a device prefix is declared. A
+    table keyed by prefix that carries a key the register lacks describes a
+    device nothing can route to, and it stays silent about it."""
+    orphans = sorted(set(keys) - set(_SN_PREFIX_MAP))
+    assert not orphans, f"prefixes missing from _SN_PREFIX_MAP: {orphans}"
