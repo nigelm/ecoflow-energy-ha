@@ -351,6 +351,9 @@ class TestBounds:
             # f92 unknown: the RE11 keeps the declared 1..100, the RE41 starts at 0.
             ("RE11TEST00000001", None, (1, 100)),
             ("RE41TEST00000001", None, (0, 100)),
+            # The RE43 floor is borrowed from the RE11, its own row says 1.
+            ("RE43TEST00000001", 80, (1, 80)),
+            ("RE43TEST00000001", None, (1, 100)),
         ],
     )
     async def test_the_floor_comes_from_the_models_row(
@@ -499,15 +502,18 @@ class TestDispatch:
 
 
 class TestGating:
-    def test_only_the_re11_and_re41_get_the_number(self) -> None:
-        """B2.5: the write is confirmed on two variants, not on the family."""
-        for confirmed in ("RE11TEST00000001", "RE41TEST00000001"):
+    def test_only_the_re11_re41_and_re43_get_the_number(self) -> None:
+        """B2.5: the write is confirmed on three variants, not on the family.
+
+        The RE43's rests on the app's own write alone; a model with
+        no write on record, RE17 and RE42, gets nothing.
+        """
+        for confirmed in ("RE11TEST00000001", "RE41TEST00000001", "RE43TEST00000001"):
             assert _get_number_defs(DEVICE_TYPE_OCEAN2, confirmed) == OCEAN2_NUMBERS
         assert [d.key for d in OCEAN2_NUMBERS] == ["backup_reserve"]
         for serial in (
             "RE17TEST00000001",
             "RE42TEST00000001",
-            "RE43TEST00000001",
             "",
         ):
             assert _get_number_defs(DEVICE_TYPE_OCEAN2, serial) == [], serial

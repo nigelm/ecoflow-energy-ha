@@ -5951,10 +5951,11 @@ class Ocean2Controls:
 
     ``reserve_floor`` is the lowest Backup Reserve the model is written with:
     the RE11 has only acknowledged 1 and up, the RE41 has held 0 on its own
-    unit. ``storm_param_full`` says whether the Storm Guard write sends all
-    three StormParam fields (the RE41 app's own bytes) or only the switch
-    field (the RE11 app's bytes); the fields are presence-tracked, so the two
-    are different messages.
+    unit, and the RE43 floor of 1 is borrowed from the RE11 (the lowest value
+    seen on that unit is 10). ``storm_param_full`` says whether the Storm
+    Guard write sends all three StormParam fields (the RE41 app's own bytes)
+    or only the switch field (the RE11 app's bytes); the fields are
+    presence-tracked, so the two are different messages.
     """
 
     reserve_floor: int | None
@@ -5962,15 +5963,19 @@ class Ocean2Controls:
 
 
 # Ocean 2 variants that may be written to, and the write facts of each. Only
-# the RE11 and the RE41 have writes on record, so only they get controls. The
-# RE11 has both (the Backup Reserve and the Storm Guard switch, each with its
-# acknowledgement and read-back). The RE41 has Backup Reserve writes from Home
-# Assistant with acknowledgement and read-back; for its Storm Guard only the
-# app's own switching is on record (the OFF acknowledgement and the ON
-# read-back), no write from Home Assistant yet, and the long form is the one
-# the RE41 app was recorded sending. RE17 is routed with the RE11 for reading,
-# and RE42 and RE43 differ on the read side already; a read-only routing does
-# not carry over to a write.
+# the RE11, the RE41 and the RE43 have writes on record, so only they get
+# controls. The RE11 has both (the Backup Reserve and the Storm Guard switch,
+# each with its acknowledgement and read-back). The RE41 has Backup Reserve
+# writes from Home Assistant with acknowledgement and read-back; for its Storm
+# Guard only the app's own switching is on record (the OFF acknowledgement and
+# the ON read-back), no write from Home Assistant yet, and the long form is the
+# one the RE41 app was recorded sending. The RE43 has a Backup Reserve write
+# only on record from the app itself (one recording: the app's write, the
+# device's acknowledgement and the read-back on field 10); no write from Home
+# Assistant has been tried on it yet, and no Storm Guard recording exists, so
+# its Storm Guard column stays empty. RE17 is routed with the RE11 for reading,
+# and RE42 differs on the read side already; a read-only routing does not
+# carry over to a write.
 # This table says what is confirmed on the model, the accessory gate on the
 # number and the switch says this unit reports the value: two facts, not two
 # names for one. The two columns part where a model has one control confirmed
@@ -5978,6 +5983,7 @@ class Ocean2Controls:
 OCEAN2_CONTROLS: dict[str, Ocean2Controls] = {
     "RE11": Ocean2Controls(reserve_floor=1, storm_param_full=False),
     "RE41": Ocean2Controls(reserve_floor=0, storm_param_full=True),
+    "RE43": Ocean2Controls(reserve_floor=1, storm_param_full=None),
 }
 
 

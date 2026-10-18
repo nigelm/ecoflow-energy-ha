@@ -606,8 +606,9 @@ class TestTheTwoColumnsOfTheRowAreIndependent:
     the switch and the storm write; neither stands in for the other.
 
     The real table sets both columns on both rows, so only a table with a
-    one-sided row can tell them apart. RE43 (reserve confirmed, no storm) is
-    the shape the next model needs.
+    one-sided row can tell them apart. The real RE43 row is one-sided too, but
+    these tests use a made-up key (RE98) so they do not depend on it: a later
+    Storm Guard recording on the RE43 would change that row, not these tests.
     """
 
     @staticmethod
@@ -616,7 +617,7 @@ class TestTheTwoColumnsOfTheRowAreIndependent:
             const_module,
             "OCEAN2_CONTROLS",
             {
-                "RE43": const_module.Ocean2Controls(
+                "RE98": const_module.Ocean2Controls(
                     reserve_floor=1, storm_param_full=None
                 ),
                 "RE99": const_module.Ocean2Controls(
@@ -654,10 +655,10 @@ class TestTheTwoColumnsOfTheRowAreIndependent:
     ) -> None:
         self._rows(monkeypatch)
 
-        assert _get_number_defs(DEVICE_TYPE_OCEAN2, "RE43TEST00000001") == (
+        assert _get_number_defs(DEVICE_TYPE_OCEAN2, "RE98TEST00000001") == (
             OCEAN2_NUMBERS
         )
-        assert _get_switch_defs(DEVICE_TYPE_OCEAN2, "RE43TEST00000001") == []
+        assert _get_switch_defs(DEVICE_TYPE_OCEAN2, "RE98TEST00000001") == []
         assert _get_number_defs(DEVICE_TYPE_OCEAN2, "RE99TEST00000001") == []
         assert _get_switch_defs(DEVICE_TYPE_OCEAN2, "RE99TEST00000001") == (
             OCEAN2_SWITCHES
@@ -670,7 +671,7 @@ class TestTheTwoColumnsOfTheRowAreIndependent:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         self._rows(monkeypatch)
-        coordinator, mqtt, _ = _coordinator(hass, "RE43TEST00000001")
+        coordinator, mqtt, _ = _coordinator(hass, "RE98TEST00000001")
         coordinator._apply_data({"storm_guard_enabled": False})
 
         task = hass.async_create_task(coordinator.async_set_ocean2_storm_guard(True))
@@ -692,6 +693,28 @@ class TestTheTwoColumnsOfTheRowAreIndependent:
 
         task = hass.async_create_task(coordinator.async_set_ocean2_backup_reserve(23))
         error = await self._refused(task, mqtt)
+
+        assert isinstance(error, ValueError)
+        assert "not available" in str(error)
+        mqtt.send_get_all.assert_not_called()
+        mqtt.send_proto_set.assert_not_called()
+
+
+class TestTheRealRe43RowHasNoStormGuard:
+    """The shipped RE43 row has a Backup Reserve floor and no Storm Guard form.
+
+    Unlike the made-up rows above this reads the real table, so a later Storm
+    Guard recording on the RE43 has to change this test together with the row.
+    """
+
+    async def test_a_storm_write_on_an_re43_is_refused_and_nothing_is_sent(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        coordinator, mqtt, _ = _coordinator(hass, "RE43TEST00000001")
+        coordinator._apply_data({"storm_guard_enabled": False})
+
+        task = hass.async_create_task(coordinator.async_set_ocean2_storm_guard(True))
+        error = await TestTheTwoColumnsOfTheRowAreIndependent._refused(task, mqtt)
 
         assert isinstance(error, ValueError)
         assert "not available" in str(error)
