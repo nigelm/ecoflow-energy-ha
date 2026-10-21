@@ -1,59 +1,46 @@
 # Contributing to EcoFlow Energy
 
-Thank you for your interest in contributing to this Home Assistant custom integration for EcoFlow devices. Contributions of all kinds are welcome -- bug reports, feature requests, documentation improvements, and code.
+Thanks for contributing to this Home Assistant custom integration for EcoFlow devices. Bug reports, feature requests, documentation improvements and code are all welcome.
 
 ## Development Setup
 
-1. **Python 3.12+** is required.
+1. **Python 3.14** is required to run the test suite. The pinned Home Assistant test package needs it. Create the virtual environment with it (`python3.14 -m venv .venv`) before you install anything.
 
 2. Clone the repository and install dependencies:
    ```bash
    git clone https://github.com/shuette42/ecoflow-energy-ha.git
    cd ecoflow-energy-ha
-   pip install paho-mqtt protobuf pytest pytest-homeassistant-custom-component
+   pip install -r requirements_test.txt
+   pip install "paho-mqtt>=2.1.0" "protobuf>=4.21.0" "cryptography>=42.0.0"
+   pip install -r requirements-dev.txt
    ```
 
-3. Optionally, set up a local Home Assistant development environment for end-to-end testing. The integration can be loaded by symlinking `custom_components/ecoflow_energy` into your HA config directory.
+3. For end-to-end testing, you can also run a local Home Assistant development environment. To load the integration, symlink `custom_components/ecoflow_energy` into your HA config directory.
 
 ## Running Tests
 
+CI runs the five commands below on every pull request. Run them locally before you open one, all from the repository root:
+
 ```bash
-python3 -m pytest
+pytest tests/ -v
+ruff check custom_components/ tests/
+ruff format --check custom_components/ tests/
+mypy custom_components/ecoflow_energy
+mypy tests/
 ```
 
-The test suite contains 550+ tests covering parsers, protocol decoding, API client logic, energy integration, and Home Assistant platform setup. **All tests must pass before submitting a pull request.**
+`pytest` covers parsers, protocol decoding, API client logic, energy integration and Home Assistant platform setup. `ruff check` and `ruff format --check` are the lint and formatting gates, and `mypy` runs twice, once over the integration and once over the tests. **All of them must pass before you open a pull request.** CI runs Python 3.14. The integration itself supports the Python versions of Home Assistant 2025.1.0 and newer.
 
-## Code Style
+## Code and Pull Requests in Short
 
-- Follow **PEP 8** conventions.
-- Use `from __future__ import annotations` at the top of every Python file.
-- Add **type hints** to all function signatures.
-- Use `_LOGGER = logging.getLogger(__name__)` for logging (Home Assistant convention).
-- Keep log messages actionable and include context (device SN, error reason). Transient errors should use `DEBUG` level, not `WARNING` or `ERROR`.
+The detailed rules live in `documentation/contributing/`. In short:
 
-## Architecture Overview
-
-All integration code lives under `custom_components/ecoflow_energy/`:
-
-```
-custom_components/ecoflow_energy/
-    __init__.py          # HA setup and teardown
-    coordinator/         # DataUpdateCoordinator (HTTP polling + MQTT push), split into focused modules
-    config_flow.py       # ConfigFlow and OptionsFlow
-    sensor.py            # Sensor entities
-    binary_sensor.py     # Binary sensor entities
-    switch.py            # Switch entities
-    number.py            # Number entities
-    const.py             # Entity definitions per device type
-    ecoflow/             # Core library (no HA dependencies)
-        iot_api.py       # IoT Developer API client
-        cloud_http.py    # HTTP quota polling
-        cloud_mqtt.py    # MQTT client (TCP + WSS)
-        parsers/         # Device-specific parsers
-        proto/           # Protobuf decoder and bindings
-```
-
-The `ecoflow/` subdirectory contains the core library with no Home Assistant dependencies, making it independently testable. Entity platforms use the `CoordinatorEntity` pattern.
+- Put each new file in the right layer: `ecoflow/` never imports Home Assistant. See [Architecture and Structure](documentation/contributing/architecture-and-structure.md).
+- Name new files, functions and entity keys the way [Naming](documentation/contributing/naming.md) describes.
+- Ship a test that fails without your change, and run the commands above. See [Testing](documentation/contributing/testing.md).
+- Add one line to `CHANGELOG.md` and leave the version in `manifest.json` alone. See [Changelog and Versioning](documentation/contributing/changelog-and-versioning.md).
+- Check your change against the [Design Principles](documentation/contributing/design-principles.md) before you write code.
+- Fork the repository, branch from `main`, keep each pull request to one feature or fix, name the issue with `Ref #N` and write clear commit messages in English (for example `feat: add battery temperature sensor for Delta 2 Max`).
 
 ## Adding Device Support
 
@@ -66,7 +53,7 @@ data through the main unit. PowerOcean add-ons such as PowerGlow and PowerPulse
 are the clearest example: they show up as separate entries in the account device
 list, but a quota request against their own serial number is rejected with error
 `1006`, and their telemetry appears as extra keys in the PowerOcean quota
-response. Those keys are added to `ecoflow/parsers/powerocean.py` and surfaced as
+response. Add those keys to the PowerOcean parsers (`ecoflow/parsers/powerocean.py` for the quota response, `ecoflow/parsers/powerocean_proto.py` for Enhanced Mode push data). They surface as
 additional PowerOcean sensors. A new device type with its own coordinator would
 have nothing to poll.
 
@@ -95,7 +82,7 @@ The file-by-file walk, with the WAVE 3 as the worked example, is in
   exists on some installations, for example when an optional accessory is
   attached, the sensor definition must set `disabled_by_default=True` (Home
   Assistant's `entity_registry_enabled_default=False`). Owners who have the
-  hardware enable it in one click; everyone else is not left with a permanently
+  hardware enable it in one click. Everyone else is spared a permanently
   unavailable entity.
 - **No placeholder zeros.** If a field or its container is missing from the
   payload, emit no key at all. Never substitute `0.0`. On a `total_increasing`
@@ -109,10 +96,10 @@ The file-by-file walk, with the WAVE 3 as the worked example, is in
   translation without a matching key fails as an orphan. Entities with enum
   states need their state translations too. Write the English and, if you can,
   the German. For the languages you do not speak, copy the English text into
-  the file so the key sets stay identical, and say so in the PR. Those texts
-  are translated by the maintainer before the merge. Home Assistant renders English for any key
-  a language file lacks, so a copied text is never worse than a missing one.
-  The tests still reject a missing one.
+  the file so the key sets stay identical, and say so in the PR. The maintainer
+  translates those texts before the merge. Home Assistant renders English for
+  any key a language file lacks, so a copied text is never worse than a missing
+  one. The tests still reject a missing one.
 - **Updated device counts.** The sensor counts in `README.md` and in
   `documentation/entities/` are per device type. If your PR adds sensors, adjust
   the numbers in the same PR.
@@ -121,21 +108,12 @@ The file-by-file walk, with the WAVE 3 as the worked example, is in
 Adding one sensor therefore touches around eight files, not one. That is normal
 here and not a sign you did something wrong.
 
-## Pull Request Guidelines
-
-1. **Fork** the repository and create a feature branch from `main`.
-2. Keep each PR focused -- one feature or fix per PR.
-3. **Include tests** for new functionality or bug fixes.
-4. **Update `CHANGELOG.md`** with your changes under an appropriate category (Added, Changed, Fixed, Removed).
-5. Write clear, descriptive commit messages (e.g., `feat: add battery temperature sensor for Delta 2 Max`).
-6. Ensure all tests pass before requesting review.
-
 ## Reporting Issues
 
 Please use [GitHub Issues](https://github.com/shuette42/ecoflow-energy-ha/issues) and include:
 
 - **Home Assistant version** and **integration version**
-- **Device type** (PowerOcean, Delta 2 Max, Smart Plug) and firmware version if known
+- **Device model** (as listed under Supported Devices in the README) and firmware version if known
 - **Relevant log entries** from Home Assistant (Settings > System > Logs)
 - **Steps to reproduce** the issue
 - **Expected vs. actual behavior**
