@@ -1022,6 +1022,28 @@ class SetCommandsMixin(_Base):
                 payload, f"stream_ac_outlet_{outlet}"
             )
 
+    async def async_set_stream_feed_in_control(self, turn_on: bool) -> bool:
+        """Switch the Stream feed-in control on or off over the developer API.
+
+        Standard Mode only: the write is the IoT Developer API quota PUT, so an
+        app login (Enhanced Mode) is refused here as a second line behind the
+        switch's own mode filter. The read-back is the polled `feedGridMode`.
+        """
+        from ..ecoflow.stream_commands import build_feed_in_control_command
+
+        if self._auth_method == AUTH_METHOD_APP:
+            _LOGGER.debug(
+                "Feed-in control write refused for %s: no developer keys on an "
+                "app login",
+                self.device_tag,
+            )
+            return False
+
+        async with self._device_config_lock:
+            return await self._async_send_http_quota_set(
+                build_feed_in_control_command(turn_on)
+            )
+
     async def async_set_stream_ac5000_work_mode(self, option: str) -> bool:
         """Write the STREAM AC 5000 work mode under the config lock.
 
@@ -3081,6 +3103,16 @@ class SetCommandsMixin(_Base):
         if self._auth_method == AUTH_METHOD_APP:
             return await self._async_send_delta3_set_proto(command)
 
+        return await self._async_send_http_quota_set(command)
+
+    async def _async_send_http_quota_set(self, command: dict[str, Any]) -> bool:
+        """Write one setting over the developer HTTP quota endpoint.
+
+        Shared by every control that writes through
+        `PUT /iot-open/sign/device/quota`. Only an entry with developer keys
+        has the HTTP client this needs; callers on an app login must not
+        reach it.
+        """
         if self._http_client is None:
             _LOGGER.warning(
                 "Cannot apply setting for %s - no write channel available "
@@ -3092,7 +3124,10 @@ class SetCommandsMixin(_Base):
         result = await self._http_client.set_quota(command)
         params = command.get("params", {})
         if result is None:
-            _LOGGER.warning("SET failed for %s: no response", self.device_tag)
+            # `set_quota` returns None for a transport failure and for an API
+            # rejection alike; the client keeps the rejection code.
+            cause = self._http_client.last_error_code or "no response"
+            _LOGGER.warning("SET failed for %s: %s", self.device_tag, cause)
             self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
             return False
 
