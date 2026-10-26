@@ -1,18 +1,18 @@
-# Integrating a PowerOcean Solar/Battery System with Predbat
+# Integrating a PowerOcean Solar/Battery System with PredBat
 
-Predbat is a home battery automation program that can run as an app on Home
+PredBat is a home battery automation program that can run as an app on Home
 Assistant
 
 It runs every 5 minutes and, by default, forecasts 48 hours ahead
 (configurable), with the plan typically covering at least 24 hours after the
 first charge slot.
 
-Predbat will automatically decide when to charge and discharge your battery to
+PredBat will automatically decide when to charge and discharge your battery to
 achieve the best (lowest) cost spend within the parameters you have set. It uses
 the solar production forecast from Solcast, Open-Meteo, or Forecast.solar
 combined with your historical energy usage to make this prediction. It can take
 account of EV charging and/or schedule that charging. It can work with
-specialised tariffs including fully variable tarrifs like Agile Octopus.
+specialised tariffs including fully variable tariffs like Agile Octopus.
 
 ## Scope of PowerOcean Integration with PredBat
 
@@ -27,45 +27,47 @@ system which will allow PredBat to:-
 
 At this time it does not handle:-
 
-- Predbat controlled energy export from the battery to the grid - I have predbat set to `Control Charge` mode.
-
-The configuration in this document has been running in this form on my system
-without issues for more than two weeks (and previous less sophisticated versions
-of it for rather longer before).
-
-The `Work Mode` for the PowerOcean should be set to `Self-use` - I have no idea
-what would happen if you had the system in the AI mode but I suspect that
-predbat and EcoFlow fighting over control would not lead to a good result.
+- PredBat controlled energy export from the battery to the grid 
 
 ## Mechanism Of Control
 
-The PredBat configuration allows it to see the current power (in KW) of the
+The PredBat configuration allows it to see the current power (in kW) of the
 PowerOcean Battery, Load (Home), Solar and Grid, and today's energy usage for
 Battery, Load (Home), Solar and Grid. Additionally PredBat can also see the
 PowerOcean battery SOC (State of Charge percentage) and see and change the
 PowerOcean Backup Reserve (percentage of battery reserved).
 
 There is a custom schedule set up in the EcoFlow app to charge the battery at
-5KW covering the whole day. There are custom automations defined in Home
-Assistant to enable/disable this schedule, and PredBat uses these automations to
-switch on/off charging the battery.
+5kW covering the whole day. There are custom automations defined in Home
+Assistant to enable/disable this schedule (setting the charging power as well),
+and PredBat uses these automations to switch on/off charging the battery.
 
 There are stub automations set up to handle export to grid, but at this time I
 do not have those working, so they currently just log an action to Home
 Assistant.
 
+## Prerequisites
+
+- The `ecoflow-energy-ha` (EcoFlow Energy) integration in Home Assistant is
+  installed and configured, and connected in `Enhanced` mode (the schedules used
+  are not visible in `Standard` mode)
+- Your EcoFlow PowerOcean needs to be running in `Self-Use` work mode (this can
+  be set from within the Home Assistant integration or from the EcoFlow app).
+- PredBat app is installed - see
+  https://springfall2008.github.io/batpred/install/#PredBat-app-install
+- If you are using an Octopus Energy tariff then you need to have the [Octopus
+  Energy integration](https://bottlecapdave.github.io/HomeAssistant-OctopusEnergy/)
+  installed and configured
+- For car charging you may also need any integration for your car charger, and
+  ideally an integration that can see the current state of charge for your car
+
 ## Configuration
 
-This assumes you have installed and configured the `ecoflow-energy-ha` (EcoFlow
-Energy) integration in Home Assistant, and the basic `PredBat` app installation.
-
-In my installation the EcoFlow PowerOcean is marked as being in the Garage (an
-Area defined within Home Assistant) - this means that some of the entity names
-are prefixed (for me) with `garage`. For example while the SOC (State of Charge)
-is entity `sensor.ecoflow_powerocean_battery_soc` the home energy used today is
-`sensor.garage_ecoflow_powerocean_home_energy_usage_today`. When taking this
-config and using it for your own system please check that the entity names are
-right for your installation.
+All of the configuration below assumes your EcoFlow integration has sensor
+entity ids that start `sensor.ecoflow_powerocean_` - for example the SOC (State
+of charge) is `sensor.ecoflow_powerocean_battery_soc`. If this is not the case
+you will need to change the entity ids used within the Home Assistant
+configuration and within PredBat's configuration to match your installation.
 
 ### EcoFlow Automations
 
@@ -78,8 +80,8 @@ charge its battery packs, do the following operations within the app:-
 4. Select `Scheduled Tasks`
 5. Press `set` (confusingly labeled `No tasks` on the current version of the IOS
    app I am testing with)
-6. Press `Schedule charing/discharging +` 7. Under `If`, change the times to be
-   `00:00` - `24:00` (ie select the whole day)
+6. Press `Schedule charging/discharging +` 
+7. Under `If`, change the times to be `00:00` - `24:00` (ie select the whole day)
 8. Under `Then` select `Charge the battery`, set `Max power` to `5000W`
 9. Under `Repeat` select `Daily`
 10. Save it (touch the Tick at the top right of the screen)
@@ -87,29 +89,65 @@ charge its battery packs, do the following operations within the app:-
 
 If you now check the EcoFlow Energy integration in Home Assistant you should see
 your schedule appear, probably as `Schedule 1` in the controls part of the
-integration - so there would be two entries `Schedule 1 Charge Power` and
-`Schedule 1 Enabled`
+integration - so there would be two entries `Schedule 1 Charge Power` (with
+entity id `number.ecoflow_powerocean_schedule_1_charge_power`) and `Schedule 1
+Enabled` (with entity id `switch.ecoflow_powerocean_schedule_1_enabled`)
+
+If your entity ids do not match the two above, please update the scripts in the
+next section to reflect your actual entity ids.
+
+### Home Assistant Helpers
+
+PredBat requires a daily resetting energy meter for each of used load, import,
+export and solar PV. These are not provided by the EcoFlow integration, so you
+need to define 4 helpers to do this:-
+
+- `Home Energy Usage Today` is based on `Home Energy` which has entity id
+  `sensor.ecoflow_powerocean_home_energy` and results in
+  `sensor.ecoflow_powerocean_home_energy_usage_today`
+- `Grid Import Energy Today` is based on `Grid Import Energy` which has entity
+  id `sensor.ecoflow_powerocean_grid_import_energy` and results in
+  `sensor.ecoflow_powerocean_import_energy_today`
+- `Grid Export Energy Today` is based on `Grid Import Energy` which has entity
+  id `sensor.ecoflow_powerocean_grid_import_energy` and results in
+  `sensor.ecoflow_powerocean_export_energy_today`
+- `Solar Energy Today` is based on `Solar Energy` which has entity id
+  `sensor.ecoflow_powerocean_solar_energy` and results in
+  `sensor.ecoflow_powerocean_solar_energy_today`
+
+For each of these:-
+
+- Go to `Settings` -> `Devices & Services` -> `Helpers`
+- Click `Create Helper` button at bottom right
+- Choose `Utility Meter`
+- Fill in the name from the list above
+- Use the based on name or entity id to fill in the `Input Sensor`
+- Set `Meter Reset Cycle` to `Daily`
+- Set both `Periodically Resetting` and `Sensor Always Available`
+- Click `Submit` and check the entity id matches what you want (you can change it).
 
 ### Home Assistant Scripts
 
 I define 4 Home Assistant Scripts to perform the following PowerOcean functions:-
 
-- Start charging - with the charging power defined in watts (defaults to 5000)
-- Stop charging
-- Start export (currently placeholder only)
-- Stop export (currently placeholder only)
+- Start charging - with the charging power defined in watts (defaults to 5000) - `script.PredBat_powerocean_charge_start`
+- Stop charging - `script.PredBat_powerocean_charge_stop`
+- Start export (currently placeholder only) - `script.PredBat_powerocean_export_start`
+- Stop export (currently placeholder only) - `script.PredBat_powerocean_export_stop`
 
 To create these in Home Assistant go to `Settings` -> `Automations and scenes`
--> `Scripts`. For each script click `Create script` -> `Create new script` and
-then use the top right ⋮ menu item to select `Edit in YAML`. Copy the YAML
-content for one script from the below examples and save it. (If your schedule
-created in the previous step is not `Schedule 1` please change the name in the
-script).
+-> `Scripts`. For each script:-
+
+- Click `Create script` -> `Create new script` 
+- Use the top right ⋮ menu item to select `Edit in YAML`
+- Copy the YAML content for one script from the below examples and save it.
+
+
 
 ```yaml
 ---
-alias: script.predbat_powerocean_charge_start
-description: Predbat PowerOcean - Charge Start
+alias: PredBat_powerocean_charge_start
+description: PredBat PowerOcean - Charge Start
 mode: restart
 fields:
   power:
@@ -130,28 +168,28 @@ sequence:
         {{ [[snapped, 500] | max, 6000] | min }}
   - action: system_log.write
     data:
-      message: "Predbat Start Charge on EcoFlow - charge power {{ charge_power }} W"
+      message: "PredBat Start Charge on EcoFlow - charge power {{ charge_power }} W"
       level: info
   - action: number.set_value
     target:
-      entity_id: number.garage_ecoflow_powerocean_schedule_1_charge_power
+      entity_id: number.ecoflow_powerocean_schedule_1_charge_power
     data:
       value: "{{ charge_power }}"
   - action: switch.turn_on
     target:
-      entity_id: switch.garage_ecoflow_powerocean_schedule_1_enabled
+      entity_id: switch.ecoflow_powerocean_schedule_1_enabled
 
 ---
 sequence:
   - action: system_log.write
     data:
-      message: Predbat Stop Charge on EcoFlow
+      message: PredBat Stop Charge on EcoFlow
       level: info
   - action: switch.turn_off
     target:
-      entity_id: switch.garage_ecoflow_powerocean_schedule_1_enabled
-alias: script.predbat_powerocean_charge_stop
-description: Predbat Stop Charge on EcoFlow
+      entity_id: switch.ecoflow_powerocean_schedule_1_enabled
+alias: PredBat_powerocean_charge_stop
+description: PredBat Stop Charge on EcoFlow
 mode: restart
 
 ---
@@ -159,11 +197,11 @@ sequence:
   # Currently a placeholder - just generates a log message
   - action: system_log.write
     data:
-      message: Predbat Start Export on EcoFlow Placeholder
+      message: PredBat Start Export on EcoFlow Placeholder
       level: info
 
-alias: script.predbat_powerocean_export_start
-description: Predbat Start Export on EcoFlow
+alias: PredBat_powerocean_export_start
+description: PredBat Start Export on EcoFlow
 mode: restart
 
 ---
@@ -171,27 +209,31 @@ sequence:
   # Currently a placeholder - just generates a log message
   - action: system_log.write
     data:
-      message: Predbat Stop Export on EcoFlow Placeholder
+      message: PredBat Stop Export on EcoFlow Placeholder
       level: info
-alias: script.predbat_powerocean_export_stop
-description: Predbat Stop Export on EcoFlow
+alias: PredBat_powerocean_export_stop
+description: PredBat Stop Export on EcoFlow
 mode: restart
 ```
 
 ### PredBat `apps.yaml`
 
 The basic setup configures the Inverter for PredBat using the scripts defined
-above to control it. My installation has a 5kW single phase hybrid inverter and
-20kW of battery (4 units). It can apparently charge at 6kW so that is set as the
-maximum charge rate.
+above to control it. 
+
+My installation has a 5kW single phase hybrid inverter and 20kW of battery (4
+units). It can apparently charge at 6kW so that is set as the maximum charge
+rate. If your installation is different, change the details under `# --- Battery
+model ---` to match your system.
+
 
 ```yaml
 pred_bat:
-  module: predbat
+  module: PredBat
   class: PredBat
 
   # Sets the prefix for all created entities in HA - only change if you want to run more than once instance
-  prefix: predbat
+  prefix: PredBat
 
   # Timezone to work in
   timezone: Europe/London
@@ -238,10 +280,10 @@ pred_bat:
   load_power: sensor.ecoflow_powerocean_home_power
   pv_power: sensor.ecoflow_powerocean_solar_power
   grid_power: sensor.ecoflow_powerocean_grid_power
-  load_today: sensor.garage_ecoflow_powerocean_home_energy_usage_today
-  import_today: sensor.garage_ecoflow_powerocean_import_energy_today
-  export_today: sensor.garage_ecoflow_powerocean_export_energy_today
-  pv_today: sensor.garage_ecoflow_powerocean_solar_energy_today
+  load_today: sensor.ecoflow_powerocean_home_energy_usage_today
+  import_today: sensor.ecoflow_powerocean_import_energy_today
+  export_today: sensor.ecoflow_powerocean_export_energy_today
+  pv_today: sensor.ecoflow_powerocean_solar_energy_today
   reserve: number.ecoflow_powerocean_backup_reserve
 
   # --- Battery model ---
@@ -260,21 +302,21 @@ pred_bat:
 
   # --- Control (Service API) ---
   charge_start_service:
-    - service: script.script_predbat_powerocean_charge_start
+    - service: script.PredBat_powerocean_charge_start
       power: "{power}"
       repeat: True
   charge_stop_service:
-    - service: script.script_predbat_powerocean_charge_stop
+    - service: script.PredBat_powerocean_charge_stop
   discharge_start_service:
-    - service: script.script_predbat_powerocean_export_start
+    - service: script.PredBat_powerocean_export_start
   discharge_stop_service:
-    - service: script.script_predbat_powerocean_export_stop
+    - service: script.PredBat_powerocean_export_stop
 
   # --- Control behavior ---
   set_soc_enable: true
   set_reserve_enable: true
-  battery_power_invert: true # this fixes the direction of arrows on predbats power flow diagram
-  grid_power_invert: true # this fixes the direction of arrows on predbats power flow diagram
+  battery_power_invert: true # this fixes the direction of arrows on PredBats power flow diagram
+  grid_power_invert: true # this fixes the direction of arrows on PredBats power flow diagram
 
   # Inverter clock skew in minutes, e.g. 1 means it's 1 minute fast and -1 is 1 minute slow
   inverter_clock_skew_start: 0
@@ -285,44 +327,51 @@ pred_bat:
 ```
 
 Additionally I have some extra sections defined, which may be more peculiar to
-my setup. Firstly I have the configuration for Open Meteo (no API key needed)
-and National Grid to get Solar and Carbon intensity forecasts. _NB: the postcode
-used here is not my house._
+my setup. Firstly I have the configuration for Open Meteo and National Grid (no
+API key needed for either) to get Solar and Carbon intensity forecasts.
+
+Replace the sample postcode `SW1A 1AA` (Buckingham Palace) with your own
+postcode.
 
 ```yaml
-  # Solar forecast via Open-Meteo
+  # Solar forecast via Open-Meteo - three roof planes defined
   open_meteo_forecast:
-    - postcode: YO1 7HH
-      kwp: 3.22
+    - postcode: SW1A 1AA
+      kWp: 3.22
       declination: 42
       azimuth: -165
-    - postcode: YO1 7HH
-      kwp: 1.38
+    - postcode: SW1A 1AA
+      kWp: 1.38
       declination: 42
       azimuth: -75
-    - postcode: YO1 7HH
-      kwp: 1.38
+    - postcode: SW1A 1AA
+      kWp: 1.38
       declination: 42
       azimuth: 105
 
   # Carbon Intensity data direct from National grid
-  carbon_postcode: "YO1 7HH"
+  carbon_postcode: "SW1A 1AA"
   carbon_automatic: true
 ```
 
 For car charging you may need to set up configuration for your car charger. In
-my case all the defaults work and all I need to set are the battery size and the
-sensor that points to the car battery state of charge:
+my case all the defaults work and all I need to set are the battery size (58kWh)
+and the sensor that points to the car battery state of charge
+(`sensor.car_battery_soc` - you will need to change this to match your specific
+vehicle integration):
 
 ```yaml
   car_charging_battery_size:
     - 58
-  car_charging_soc: sensor.iddy_battery
+  car_charging_soc: sensor.car_battery_soc
 ```
 
+If your car and/or charger is less well supported you may need some additional
+PredBat configuration.
+
 I use Octopus Intelligent Go tariff, and have the Octopus integration from
-`BottlecapDave` installed and configured. So predbat requires some configuration
-to make use of that - this is the basic default config taken from predbad
+`BottlecapDave` installed and configured. So PredBat requires some configuration
+to make use of that - this is the basic default config taken from PredBat
 documentation/sample config.
 
 ```yaml
@@ -356,15 +405,12 @@ documentation/sample config.
 
 ### PredBat settings
 
-We set predbat to use a variable charging rate rather than always just charging
-at maximum rates. Interestingly predbat always appears to set the charge rate
-to around 2.5kW - and ecoflow then sees around 2350W going to the battery, but
-this seems less aggressive than my first attempt that always charged at maximum
-rate.
+We set PredBat to use a variable charging rate rather than always just charging
+at maximum rates as this seems less aggressive for the battery system.
 
 - In PredBat UI, under `Settings` -> `Config` find
-  `switch.predbat_set_charge_low_power` and set it to on.
-- I also change `input_number.predbat_charge_low_power_margin` to 30 (minutes),
+  `switch.PredBat_set_charge_low_power` and set it to on.
+- I also change `input_number.PredBat_charge_low_power_margin` to 30 (minutes),
   to give some extra headroom on charging.
 
 ## Log Warnings
@@ -373,3 +419,14 @@ Initially there were a lot of warnings emitted of the form `Found 1 periods of
 zero load with power data, filling using power integration`. These appear to be
 safe to ignore, and once the system has picked up more history from your
 installation they go away.
+
+## Using PredBat
+
+Initially you may wish to have PredBat in `Monitor` mode (set this on the
+PredBat Dash page in `Status` section) - this will let PredBat make predictions
+and plans but not actually control your PowerOcean.
+
+Once you are comfortable with the plan and there are no errors being logged, you
+can change PredBat into `Control charge` mode. At present there is no point in
+setting to `Control charge & discharge` because we have no forced
+discharge/export controls.
